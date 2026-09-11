@@ -1,9 +1,12 @@
 /** @jsxImportSource @opentui/solid */
 // Persistent status bar for the OpenCode TUI.
 //
-// Registers a `session_prompt_right` slot showing throughput and session
-// cost, derived from each AssistantMessage's tokens / timestamps and the live
-// TUI session state. Generic across providers, no per-model logic.
+// Registers the full-width `app_bottom` slot (rendered below the prompt, so it
+// never competes with the input for width) and shows throughput + session
+// cost for the active session. Hidden on non-session routes (e.g. home).
+//
+// Derived from each AssistantMessage's tokens / timestamps and the live TUI
+// session state. Generic across providers, no per-model logic.
 //
 // Loaded from tui.json (options optional):
 //   { "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "cost"] }]] }
@@ -16,7 +19,7 @@
 //
 // Default show: ["tps", "cost"]
 
-import { createSignal } from "solid-js"
+import { createMemo, createSignal } from "solid-js"
 import type { TuiPlugin, TuiPluginModule, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
 
 type Stat = {
@@ -25,7 +28,6 @@ type Stat = {
   ms?: number
   cost?: number
   ttft?: number
-  model?: string
   live: boolean
 }
 
@@ -48,6 +50,13 @@ const tui: TuiPlugin = async (api, options) => {
 
   const put = (sessionID: string, stat: Stat) =>
     setStats((prev) => ({ ...prev, [sessionID]: stat }))
+
+  const currentSession = createMemo(() => {
+    const route = api.route.current
+    if (route.name !== "session" || !("params" in route)) return undefined
+    const id = route.params?.sessionID
+    return typeof id === "string" ? id : undefined
+  })
 
   api.event.on("message.part.updated", (event) => {
     const part = event.properties?.part
@@ -116,9 +125,13 @@ const tui: TuiPlugin = async (api, options) => {
 
   const slot: TuiSlotPlugin = {
     slots: {
-      session_prompt_right(ctx, value) {
+      app_bottom(ctx) {
         const fg = ctx.theme.current.textMuted
-        return <text fg={fg}>{render(value.session_id)}</text>
+        return (
+          <box visible={currentSession() !== undefined} width="100%" paddingLeft={2} paddingRight={2}>
+            <text fg={fg}>{render(currentSession() ?? "")}</text>
+          </box>
+        )
       },
     },
   }

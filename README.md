@@ -1,7 +1,7 @@
 # opencode-status-bar
 
 A small TUI plugin for [opencode](https://opencode.ai) that adds a persistent
-status line to the session prompt (right side of the input box).
+status line on its own full-width row below the prompt, for the active session.
 
 ```
 ⚡ 42.3 tok/s · $0.1234
@@ -65,7 +65,9 @@ Default: `["tps", "cost"]`.
   and includes time-to-first-token, so it understates pure decode speed for
   slow-starting models.
 - Providers that do not report token usage produce no `tps` segment.
-- The status line renders into opencode's `session_prompt_right` slot.
+- The status line renders into opencode's full-width `app_bottom` slot, so it
+  does not compete with the prompt input for horizontal space. It is hidden on
+  non-session routes (e.g. the home screen).
 
 ## License
 
