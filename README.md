@@ -8,6 +8,7 @@ status line on its own full-width row below the prompt, for the active session.
 ```
 
 - **tps** — live tokens/sec while streaming, final end-to-end rate on completion
+- **decode** — pure decode rate (excludes time to first token)
 - **cost** — cumulative cost for the session
 - **ttft** — time to first streamed token (after completion)
 - **dur** — last turn wall time (after completion)
@@ -52,8 +53,8 @@ check that `status-bar` is active.
 ## Configuration
 
 The optional second tuple element controls which segments are shown and in
-what order. Any subset of `tps`, `cost`, `ttft`, `dur`, `cache`, `todo`,
-`pending`:
+what order. Any subset of `tps`, `decode`, `cost`, `ttft`, `dur`, `cache`,
+`todo`, `pending`:
 
 ```json
 {
