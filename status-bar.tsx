@@ -11,6 +11,9 @@
 // Loaded from tui.json (options optional):
 //   { "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "cost"] }]] }
 //
+// Spacing options (all optional, default 0; marginTop may be negative):
+//   marginTop, marginBottom, paddingTop, paddingBottom
+//
 // Segments (order = array order):
 //   tps   ⚡ 42.3 tok/s     live rate while streaming, final on complete
 //   cost  $0.1234          cumulative cost for the session
@@ -35,11 +38,19 @@ const DEFAULT_SHOW = ["tps", "cost"]
 const SEP = " · "
 
 const usd = (c: number) => (c >= 1 ? `$${c.toFixed(2)}` : `$${c.toFixed(4)}`)
+const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d)
 
 const tui: TuiPlugin = async (api, options) => {
   const show = Array.isArray(options?.show)
     ? (options.show as unknown[]).filter((x): x is string => typeof x === "string")
     : DEFAULT_SHOW
+
+  // Vertical spacing knobs. marginTop may be negative to cancel the host's
+  // padding above app_bottom.
+  const marginTop = num(options?.marginTop, 0)
+  const marginBottom = num(options?.marginBottom, 0)
+  const paddingTop = num(options?.paddingTop, 0)
+  const paddingBottom = num(options?.paddingBottom, 0)
 
   const [stats, setStats] = createSignal<Record<string, Stat>>({})
 
@@ -128,7 +139,16 @@ const tui: TuiPlugin = async (api, options) => {
       app_bottom(ctx) {
         const fg = ctx.theme.current.textMuted
         return (
-          <box visible={currentSession() !== undefined} width="100%" paddingLeft={2} paddingRight={2}>
+          <box
+            visible={currentSession() !== undefined}
+            width="100%"
+            paddingLeft={2}
+            paddingRight={2}
+            paddingTop={paddingTop}
+            paddingBottom={paddingBottom}
+            marginTop={marginTop}
+            marginBottom={marginBottom}
+          >
             <text fg={fg}>{render(currentSession() ?? "")}</text>
           </box>
         )

@@ -59,6 +59,16 @@ what order. Any subset of `tps`, `cost`, `ttft`, `dur`:
 
 Default: `["tps", "cost"]`.
 
+Vertical spacing can be tuned with `marginTop`, `marginBottom`, `paddingTop`
+and `paddingBottom` (numbers, default `0`). `marginTop` may be negative to
+cancel the host's padding above the `app_bottom` slot:
+
+```json
+{
+  "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "cost"], "marginTop": -1 }]]
+}
+```
+
 ## Notes
 
 - TPS is `(output + reasoning) / (completed − created)`. That is wall-clock
