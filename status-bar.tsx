@@ -11,8 +11,9 @@
 // Loaded from tui.json (options optional):
 //   { "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "cost"] }]] }
 //
-// Spacing options (all optional, default 0; marginTop may be negative):
-//   marginTop, marginBottom, paddingTop, paddingBottom
+// Spacing options (all optional):
+//   marginTop, marginBottom, paddingTop, paddingBottom (default 0; margin may be negative)
+//   paddingLeft (default 5), paddingRight (default 2)
 //
 // Segments (order = array order):
 //   tps     ⚡ 42.3 tok/s   live rate while streaming, final on complete
@@ -54,6 +55,11 @@ const tui: TuiPlugin = async (api, options) => {
   const marginBottom = num(options?.marginBottom, 0)
   const paddingTop = num(options?.paddingTop, 0)
   const paddingBottom = num(options?.paddingBottom, 0)
+  // Horizontal inset. opencode's prompt text starts at column 5 (session
+  // padding 2 + prompt left border 1 + prompt padding 2), so 5 aligns the
+  // status bar with the prompt's own meta row.
+  const paddingLeft = num(options?.paddingLeft, 5)
+  const paddingRight = num(options?.paddingRight, 2)
 
   const [stats, setStats] = createSignal<Record<string, Stat>>({})
 
@@ -169,8 +175,8 @@ const tui: TuiPlugin = async (api, options) => {
           <box
             visible={currentSession() !== undefined}
             width="100%"
-            paddingLeft={2}
-            paddingRight={2}
+            paddingLeft={paddingLeft}
+            paddingRight={paddingRight}
             paddingTop={paddingTop}
             paddingBottom={paddingBottom}
             marginTop={marginTop}
