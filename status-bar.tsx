@@ -11,7 +11,7 @@
 // Segments (order = array order):
 //   tps   ⚡ 42.3 tok/s     live rate while streaming, final on complete
 //   cost  $0.1234          cumulative cost for the session
-//   ttft  ttft 420ms       time to first streamed token (after complete)
+//   ttft  ttft 0.42s       time to first streamed token (after complete)
 //   dur   8.3s             last turn wall time (after complete)
 //
 // Default show: ["tps", "cost"]
@@ -107,7 +107,7 @@ const tui: TuiPlugin = async (api, options) => {
     const seg: Record<string, string> = {
       tps: s && s.tps > 0 ? `⚡ ${s.tps.toFixed(1)} tok/s` : "",
       cost: cost > 0 ? usd(cost) : "",
-      ttft: s && !s.live && s.ttft !== undefined && s.ttft >= 0 ? `ttft ${s.ttft}ms` : "",
+      ttft: s && !s.live && s.ttft !== undefined && s.ttft >= 0 ? `ttft ${(s.ttft / 1000).toFixed(2)}s` : "",
       dur: s && !s.live && s.ms ? `${(s.ms / 1000).toFixed(1)}s` : "",
     }
 
