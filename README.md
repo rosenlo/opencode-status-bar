@@ -69,7 +69,7 @@ cancel the host's padding above the `app_bottom` slot:
 
 ```json
 {
-  "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "cost"], "marginTop": -1 }]]
+  "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "cost"], "marginTop": 0 }]]
 }
 ```
 
