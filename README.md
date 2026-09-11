@@ -1,16 +1,14 @@
 # opencode-status-bar
 
 A small TUI plugin for [opencode](https://opencode.ai) that adds a persistent
-multi-metric status line to the session prompt (right side of the input box).
+status line to the session prompt (right side of the input box).
 
 ```
-⚡ 42.3 tok/s · ctx 24.1k/200k · $0.1234 · opus
+⚡ 42.3 tok/s · $0.1234
 ```
 
 - **tps** — live tokens/sec while streaming, final end-to-end rate on completion
-- **ctx** — last request context size / model context window
 - **cost** — cumulative cost for the session
-- **model** — model id of the last assistant message
 - **ttft** — time to first streamed token (after completion)
 - **dur** — last turn wall time (after completion)
 
@@ -39,7 +37,7 @@ state. There is no per-model logic.
    ```json
    {
      "$schema": "https://opencode.ai/tui.json",
-     "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "ctx", "cost", "model"] }]]
+     "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "cost"] }]]
    }
    ```
 
@@ -51,15 +49,15 @@ check that `status-bar` is active.
 ## Configuration
 
 The optional second tuple element controls which segments are shown and in
-what order. Any subset of `tps`, `ctx`, `cost`, `model`, `ttft`, `dur`:
+what order. Any subset of `tps`, `cost`, `ttft`, `dur`:
 
 ```json
 {
-  "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "model"] }]]
+  "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "cost", "dur"] }]]
 }
 ```
 
-Default: `["tps", "ctx", "cost", "model"]`.
+Default: `["tps", "cost"]`.
 
 ## Notes
 

@@ -1,23 +1,20 @@
 /** @jsxImportSource @opentui/solid */
-// Persistent multi-metric status bar for the OpenCode TUI.
+// Persistent status bar for the OpenCode TUI.
 //
 // Registers a `session_prompt_right` slot showing throughput and session
-// metrics derived from each AssistantMessage's tokens / timestamps and the
-// live TUI session state. Generic across providers, no per-model logic.
+// cost, derived from each AssistantMessage's tokens / timestamps and the live
+// TUI session state. Generic across providers, no per-model logic.
 //
 // Loaded from tui.json (options optional):
-//   { "plugin": [["./plugins/status-bar.tsx",
-//       { "show": ["tps", "ctx", "cost", "model"] }]] }
+//   { "plugin": [["./plugins/status-bar.tsx", { "show": ["tps", "cost"] }]] }
 //
 // Segments (order = array order):
-//   tps   ⚡ 42.3 tok/s            live rate while streaming, final on complete
-//   ctx   ctx 24.1k/200k           last request context / model window
-//   cost  $0.1234                  cumulative cost for the session
-//   model opus                     model id of the last assistant message
-//   ttft  ttft 420ms               time to first streamed token (after complete)
-//   dur   8.3s                     last turn wall time (after complete)
+//   tps   ⚡ 42.3 tok/s     live rate while streaming, final on complete
+//   cost  $0.1234          cumulative cost for the session
+//   ttft  ttft 420ms       time to first streamed token (after complete)
+//   dur   8.3s             last turn wall time (after complete)
 //
-// Default show: ["tps", "ctx", "cost", "model"]
+// Default show: ["tps", "cost"]
 
 import { createSignal } from "solid-js"
 import type { TuiPlugin, TuiPluginModule, TuiSlotPlugin } from "@opencode-ai/plugin/tui"
@@ -32,15 +29,8 @@ type Stat = {
   live: boolean
 }
 
-const DEFAULT_SHOW = ["tps", "ctx", "cost", "model"]
+const DEFAULT_SHOW = ["tps", "cost"]
 const SEP = " · "
-
-const fmt = (n: number) =>
-  n >= 1e6
-    ? `${(n / 1e6).toFixed(1)}M`
-    : n >= 1e3
-      ? `${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}k`
-      : String(Math.round(n))
 
 const usd = (c: number) => (c >= 1 ? `$${c.toFixed(2)}` : `$${c.toFixed(4)}`)
 
@@ -84,7 +74,7 @@ const tui: TuiPlugin = async (api, options) => {
       if (!last || now - last.t < 200 || total <= last.tokens) return
       const tps = (total - last.tokens) / ((now - last.t) / 1000)
       if (Number.isFinite(tps) && tps > 0) {
-        put(info.sessionID, { tps, tokens: total, model: info.modelID, live: true })
+        put(info.sessionID, { tps, tokens: total, live: true })
       }
       return
     }
@@ -101,7 +91,6 @@ const tui: TuiPlugin = async (api, options) => {
       ms,
       ttft: start !== undefined && start >= time.created ? start - time.created : undefined,
       cost: typeof info.cost === "number" ? info.cost : undefined,
-      model: info.modelID,
       live: false,
     })
   })
@@ -110,30 +99,14 @@ const tui: TuiPlugin = async (api, options) => {
     const s = stats()[sessionID]
     const msgs = api.state.session.messages(sessionID) ?? []
 
-    let last: (typeof msgs)[number] | undefined
     let cost = 0
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      const m = msgs[i]
-      if (m.role !== "assistant") continue
-      if (!last) last = m
-      if (typeof m.cost === "number") cost += m.cost
+    for (const m of msgs) {
+      if (m.role === "assistant" && typeof m.cost === "number") cost += m.cost
     }
-
-    const limit = (() => {
-      if (!last) return undefined
-      const provider = api.state.provider.find((p) => p.id === last!.providerID)
-      return provider?.models?.[last.modelID]?.limit?.context
-    })()
-
-    const ctxTokens = last
-      ? (last.tokens.input ?? 0) + (last.tokens.cache?.read ?? 0) + (last.tokens.cache?.write ?? 0)
-      : 0
 
     const seg: Record<string, string> = {
       tps: s && s.tps > 0 ? `⚡ ${s.tps.toFixed(1)} tok/s` : "",
-      ctx: ctxTokens > 0 ? `ctx ${fmt(ctxTokens)}${limit ? `/${fmt(limit)}` : ""}` : "",
       cost: cost > 0 ? usd(cost) : "",
-      model: last?.modelID ?? "",
       ttft: s && !s.live && s.ttft !== undefined && s.ttft >= 0 ? `ttft ${s.ttft}ms` : "",
       dur: s && !s.live && s.ms ? `${(s.ms / 1000).toFixed(1)}s` : "",
     }
