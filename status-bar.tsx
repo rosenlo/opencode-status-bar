@@ -15,10 +15,13 @@
 //   marginTop, marginBottom, paddingTop, paddingBottom
 //
 // Segments (order = array order):
-//   tps   ⚡ 42.3 tok/s     live rate while streaming, final on complete
-//   cost  $0.1234          cumulative cost for the session
-//   ttft  ttft 0.42s       time to first streamed token (after complete)
-//   dur   8.3s             last turn wall time (after complete)
+//   tps     ⚡ 42.3 tok/s   live rate while streaming, final on complete
+//   cost    $0.1234        cumulative cost for the session
+//   ttft    ttft 0.42s     time to first streamed token (after complete)
+//   dur     8.3s           last turn wall time (after complete)
+//   cache   cache 82%      prompt cache hit rate of the last request
+//   todo    todo 2/5       completed/total todos for the session
+//   pending pending 1      pending permission + question requests
 //
 // Default show: ["tps", "cost"]
 
@@ -120,15 +123,39 @@ const tui: TuiPlugin = async (api, options) => {
     const msgs = api.state.session.messages(sessionID) ?? []
 
     let cost = 0
-    for (const m of msgs) {
-      if (m.role === "assistant" && typeof m.cost === "number") cost += m.cost
+    let last
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i]
+      if (m.role !== "assistant") continue
+      if (!last) last = m
+      if (typeof m.cost === "number") cost += m.cost
     }
+
+    const cacheRead = last?.tokens.cache?.read ?? 0
+    const cacheInput = last?.tokens.input ?? 0
+    const cacheRate = cacheRead + cacheInput > 0 ? cacheRead / (cacheRead + cacheInput) : undefined
+
+    const todos = api.state.session.todo(sessionID) ?? []
+    let done = 0
+    let total = 0
+    for (const t of todos) {
+      if (t.status === "cancelled") continue
+      total++
+      if (t.status === "completed") done++
+    }
+
+    const waiting =
+      (api.state.session.permission(sessionID)?.length ?? 0) +
+      (api.state.session.question(sessionID)?.length ?? 0)
 
     const seg: Record<string, string> = {
       tps: s && s.tps > 0 ? `⚡ ${s.tps.toFixed(1)} tok/s` : "",
       cost: cost > 0 ? usd(cost) : "",
       ttft: s && !s.live && s.ttft !== undefined && s.ttft >= 0 ? `ttft ${(s.ttft / 1000).toFixed(2)}s` : "",
       dur: s && !s.live && s.ms ? `${(s.ms / 1000).toFixed(1)}s` : "",
+      cache: cacheRate !== undefined ? `cache ${Math.round(cacheRate * 100)}%` : "",
+      todo: total > 0 ? `todo ${done}/${total}` : "",
+      pending: waiting > 0 ? `pending ${waiting}` : "",
     }
 
     return show.map((k) => seg[k]).filter(Boolean).join(SEP)

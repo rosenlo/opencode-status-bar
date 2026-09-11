@@ -11,6 +11,9 @@ status line on its own full-width row below the prompt, for the active session.
 - **cost** — cumulative cost for the session
 - **ttft** — time to first streamed token (after completion)
 - **dur** — last turn wall time (after completion)
+- **cache** — prompt cache hit rate of the last request
+- **todo** — completed/total todos for the session
+- **pending** — pending permission + question requests
 
 Everything is generic across providers/models: it is derived from each
 assistant message's `tokens` and `time` fields plus the live TUI session
@@ -49,7 +52,8 @@ check that `status-bar` is active.
 ## Configuration
 
 The optional second tuple element controls which segments are shown and in
-what order. Any subset of `tps`, `cost`, `ttft`, `dur`:
+what order. Any subset of `tps`, `cost`, `ttft`, `dur`, `cache`, `todo`,
+`pending`:
 
 ```json
 {
