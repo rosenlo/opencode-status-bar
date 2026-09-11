@@ -67,9 +67,9 @@ Vertical spacing can be tuned with `marginTop`, `marginBottom`, `paddingTop`
 and `paddingBottom` (numbers, default `0`). `marginTop` may be negative to
 cancel the host's padding above the `app_bottom` slot.
 
-Horizontal inset can be tuned with `paddingLeft` (default `5`) and
-`paddingRight` (default `2`). The default `5` aligns the bar with opencode's
-prompt meta row (session padding 2 + prompt left border 1 + prompt padding 2).
+Horizontal inset can be tuned with `paddingLeft` (default `3`) and
+`paddingRight` (default `2`). The default `3` aligns the bar with opencode's
+status row (session content padding 2 + prompt left border 1).
 
 For example:
 
