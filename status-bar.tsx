@@ -20,7 +20,7 @@
 //   decode  decode 52.0 tok/s  pure decode rate (excludes time to first token)
 //   cost    $0.1234        cumulative cost for the session
 //   ttft    ttft 0.42s     time to first streamed token (after complete)
-//   dur     8.3s           last turn wall time (after complete)
+//   dur     8.3s           turn wall time: counts up while busy, frozen on idle
 //   cache   cache 82%      prompt cache hit rate of the last request
 //   todo    todo 2/5       completed/total todos for the session
 //   pending pending 1      pending permission + question requests
@@ -39,10 +39,21 @@ type Stat = {
   live: boolean
 }
 
+type Turn = {
+  started: number
+  elapsed?: number
+}
+
 const DEFAULT_SHOW = ["tps", "cost"]
 const SEP = " · "
 
 const usd = (c: number) => (c >= 1 ? `$${c.toFixed(2)}` : `$${c.toFixed(4)}`)
+const fmtDur = (ms: number) => {
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  const m = Math.floor(ms / 60000)
+  const s = Math.floor((ms % 60000) / 1000)
+  return `${m}m${s.toString().padStart(2, "0")}s`
+}
 const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d)
 
 const tui: TuiPlugin = async (api, options) => {
@@ -62,6 +73,7 @@ const tui: TuiPlugin = async (api, options) => {
   const paddingRight = num(options?.paddingRight, 2)
 
   const [stats, setStats] = createSignal<Record<string, Stat>>({})
+  const [turns, setTurns] = createSignal<Record<string, Turn>>({})
 
   // messageID -> last (tokens, timestamp) sample, for the live rate.
   const sample = new Map<string, { tokens: number; t: number }>()
@@ -70,6 +82,63 @@ const tui: TuiPlugin = async (api, options) => {
 
   const put = (sessionID: string, stat: Stat) =>
     setStats((prev) => ({ ...prev, [sessionID]: stat }))
+
+  // Live turn wall clock. A turn opens when the session goes busy (covers the
+  // pre-first-token gap) and closes when it goes idle or errors — i.e. the
+  // whole busy period, including tool execution and permission waits. `now`
+  // ticks once a second while any turn is live so the badge counts up in place.
+  const [now, setNow] = createSignal(Date.now())
+  let ticker: ReturnType<typeof setInterval> | undefined
+
+  const startTicker = () => {
+    if (ticker) return
+    ticker = setInterval(() => setNow(Date.now()), 1000)
+  }
+  const stopTicker = () => {
+    if (!ticker) return
+    clearInterval(ticker)
+    ticker = undefined
+  }
+  const anyLive = () => Object.values(turns()).some((t) => t.elapsed === undefined)
+  api.lifecycle?.onDispose?.(stopTicker)
+
+  const startTurn = (sessionID: string, started: number) => {
+    setTurns((prev) => {
+      const cur = prev[sessionID]
+      if (cur && cur.elapsed === undefined) return prev
+      return { ...prev, [sessionID]: { started } }
+    })
+    setNow(Date.now())
+    startTicker()
+  }
+
+  const endTurn = (sessionID: string, endedAt?: number) => {
+    setTurns((prev) => {
+      const cur = prev[sessionID]
+      if (!cur || cur.elapsed !== undefined) return prev
+      const end = endedAt ?? Date.now()
+      if (end < cur.started) return prev
+      return { ...prev, [sessionID]: { started: cur.started, elapsed: end - cur.started } }
+    })
+    if (!anyLive()) stopTicker()
+  }
+
+  api.event.on("session.status", (event) => {
+    const p = event.properties
+    if (!p) return
+    if (p.status.type === "busy" || p.status.type === "retry") startTurn(p.sessionID, Date.now())
+    else if (p.status.type === "idle") endTurn(p.sessionID)
+  })
+
+  api.event.on("session.idle", (event) => {
+    const id = event.properties?.sessionID
+    if (typeof id === "string") endTurn(id)
+  })
+
+  api.event.on("session.error", (event) => {
+    const id = event.properties?.sessionID
+    if (typeof id === "string") endTurn(id)
+  })
 
   const currentSession = createMemo(() => {
     const route = api.route.current
@@ -154,6 +223,19 @@ const tui: TuiPlugin = async (api, options) => {
       (api.state.session.permission(sessionID)?.length ?? 0) +
       (api.state.session.question(sessionID)?.length ?? 0)
 
+    // Turn wall time: live while the session is busy, frozen once it goes idle.
+    // Falls back to the last assistant message's duration for turns the plugin
+    // did not observe (e.g. loaded mid-session). Reading `now()` ties the
+    // render to the 1s ticker; Date.now() keeps mid-tick renders accurate.
+    void now()
+    const turn = turns()[sessionID]
+    const turnMs =
+      turn !== undefined
+        ? (turn.elapsed ?? Date.now() - turn.started)
+        : s && !s.live && s.ms !== undefined
+          ? s.ms
+          : undefined
+
     const seg: Record<string, string> = {
       tps: s && s.tps > 0 ? `⚡ ${s.tps.toFixed(1)} tok/s` : "",
       decode:
@@ -162,7 +244,7 @@ const tui: TuiPlugin = async (api, options) => {
           : "",
       cost: cost > 0 ? usd(cost) : "",
       ttft: s && !s.live && s.ttft !== undefined && s.ttft >= 0 ? `ttft ${(s.ttft / 1000).toFixed(2)}s` : "",
-      dur: s && !s.live && s.ms ? `${(s.ms / 1000).toFixed(1)}s` : "",
+      dur: turnMs !== undefined ? fmtDur(turnMs) : "",
       cache: cacheRate !== undefined ? `cache ${Math.round(cacheRate * 100)}%` : "",
       todo: total > 0 ? `todo ${done}/${total}` : "",
       pending: waiting > 0 ? `pending ${waiting}` : "",

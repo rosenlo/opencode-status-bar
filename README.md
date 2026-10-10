@@ -11,7 +11,8 @@ status line on its own full-width row below the prompt, for the active session.
 - **decode** — pure decode rate (excludes time to first token)
 - **cost** — cumulative cost for the session
 - **ttft** — time to first streamed token (after completion)
-- **dur** — last turn wall time (after completion)
+- **dur** — turn wall time: counts up live while the session is busy (includes
+  tool time and permission waits), frozen when the turn goes idle
 - **cache** — prompt cache hit rate of the last request
 - **todo** — completed/total todos for the session
 - **pending** — pending permission + question requests
@@ -85,6 +86,10 @@ For example:
 - TPS is `(output + reasoning) / (completed − created)`. That is wall-clock
   and includes time-to-first-token, so it understates pure decode speed for
   slow-starting models.
+- `dur` tracks the session's busy periods: it starts when the session goes
+  busy and stops when it goes idle or errors, so a tool-call turn reads as one
+  continuous duration. Until the plugin has observed a busy period on the
+  current session, it falls back to the last assistant message's duration.
 - Providers that do not report token usage produce no `tps` segment.
 - The status line renders into opencode's full-width `app_bottom` slot, so it
   does not compete with the prompt input for horizontal space. It is hidden on
