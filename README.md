@@ -4,15 +4,17 @@ A small TUI plugin for [opencode](https://opencode.ai) that adds a persistent
 status line on its own full-width row below the prompt, for the active session.
 
 ```
-⚡ 42.3 tok/s · $0.1234
+⚡ 42.3 tok/s · ⏱ 8.3s · Σ 12m30s · $0.1234
 ```
 
 - **tps** — live tokens/sec while streaming, final end-to-end rate on completion
 - **decode** — pure decode rate (excludes time to first token)
 - **cost** — cumulative cost for the session
 - **ttft** — time to first streamed token (after completion)
-- **dur** — turn wall time: counts up live while the session is busy (includes
-  tool time and permission waits), frozen when the turn goes idle
+- **dur** — turn wall time (⏱): counts up live while the session is busy
+  (includes tool time and permission waits), frozen when the turn goes idle
+- **total** — whole-session wall time (Σ) since the session was created
+- **ctx** — context usage of the last request vs the model's context window
 - **cache** — prompt cache hit rate of the last request
 - **todo** — completed/total todos for the session
 - **pending** — pending permission + question requests
@@ -54,8 +56,8 @@ check that `status-bar` is active.
 ## Configuration
 
 The optional second tuple element controls which segments are shown and in
-what order. Any subset of `tps`, `decode`, `cost`, `ttft`, `dur`, `cache`,
-`todo`, `pending`:
+what order. Any subset of `tps`, `decode`, `cost`, `ttft`, `dur`, `total`,
+`ctx`, `cache`, `todo`, `pending`:
 
 ```json
 {
@@ -90,6 +92,11 @@ For example:
   busy and stops when it goes idle or errors, so a tool-call turn reads as one
   continuous duration. Until the plugin has observed a busy period on the
   current session, it falls back to the last assistant message's duration.
+- `total` is wall time since the session was created and keeps counting while
+  the session is open (it does not pause while idle).
+- `ctx` is `(input + output + reasoning + cache read + cache write)` of the
+  last assistant message over the model's context window — the same figure
+  opencode's sidebar shows. It is omitted when the provider gives no limit.
 - Providers that do not report token usage produce no `tps` segment.
 - The status line renders into opencode's full-width `app_bottom` slot, so it
   does not compete with the prompt input for horizontal space. It is hidden on

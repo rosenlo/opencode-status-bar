@@ -20,7 +20,9 @@
 //   decode  decode 52.0 tok/s  pure decode rate (excludes time to first token)
 //   cost    $0.1234        cumulative cost for the session
 //   ttft    ttft 0.42s     time to first streamed token (after complete)
-//   dur     8.3s           turn wall time: counts up while busy, frozen on idle
+//   dur     ⏱ 8.3s         turn wall time: counts up while busy, frozen on idle
+//   total   Σ 12m30s       whole-session wall time since the session was created
+//   ctx     ctx 63%        context usage of the last request vs the model window
 //   cache   cache 82%      prompt cache hit rate of the last request
 //   todo    todo 2/5       completed/total todos for the session
 //   pending pending 1      pending permission + question requests
@@ -50,9 +52,11 @@ const SEP = " · "
 const usd = (c: number) => (c >= 1 ? `$${c.toFixed(2)}` : `$${c.toFixed(4)}`)
 const fmtDur = (ms: number) => {
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
-  const m = Math.floor(ms / 60000)
-  const s = Math.floor((ms % 60000) / 1000)
-  return `${m}m${s.toString().padStart(2, "0")}s`
+  const s = Math.floor(ms / 1000)
+  const h = Math.floor(s / 3600)
+  const m = Math.floor((s % 3600) / 60)
+  if (h > 0) return `${h}h${m.toString().padStart(2, "0")}m`
+  return `${m}m${(s % 60).toString().padStart(2, "0")}s`
 }
 const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d)
 
@@ -83,24 +87,14 @@ const tui: TuiPlugin = async (api, options) => {
   const put = (sessionID: string, stat: Stat) =>
     setStats((prev) => ({ ...prev, [sessionID]: stat }))
 
-  // Live turn wall clock. A turn opens when the session goes busy (covers the
+  // Wall-clock ticker. A turn opens when the session goes busy (covers the
   // pre-first-token gap) and closes when it goes idle or errors — i.e. the
-  // whole busy period, including tool execution and permission waits. `now`
-  // ticks once a second while any turn is live so the badge counts up in place.
+  // whole busy period, including tool execution and permission waits. The
+  // ticker re-renders once a second so `dur` (live turn time) and `total`
+  // (session wall time) both count up in place.
   const [now, setNow] = createSignal(Date.now())
-  let ticker: ReturnType<typeof setInterval> | undefined
-
-  const startTicker = () => {
-    if (ticker) return
-    ticker = setInterval(() => setNow(Date.now()), 1000)
-  }
-  const stopTicker = () => {
-    if (!ticker) return
-    clearInterval(ticker)
-    ticker = undefined
-  }
-  const anyLive = () => Object.values(turns()).some((t) => t.elapsed === undefined)
-  api.lifecycle?.onDispose?.(stopTicker)
+  const ticker = setInterval(() => setNow(Date.now()), 1000)
+  api.lifecycle?.onDispose?.(() => clearInterval(ticker))
 
   const startTurn = (sessionID: string, started: number) => {
     setTurns((prev) => {
@@ -108,8 +102,6 @@ const tui: TuiPlugin = async (api, options) => {
       if (cur && cur.elapsed === undefined) return prev
       return { ...prev, [sessionID]: { started } }
     })
-    setNow(Date.now())
-    startTicker()
   }
 
   const endTurn = (sessionID: string, endedAt?: number) => {
@@ -120,7 +112,6 @@ const tui: TuiPlugin = async (api, options) => {
       if (end < cur.started) return prev
       return { ...prev, [sessionID]: { started: cur.started, elapsed: end - cur.started } }
     })
-    if (!anyLive()) stopTicker()
   }
 
   api.event.on("session.status", (event) => {
@@ -236,6 +227,27 @@ const tui: TuiPlugin = async (api, options) => {
           ? s.ms
           : undefined
 
+    // Whole-session wall time since the session was created.
+    const session = api.state.session.get(sessionID)
+    const totalMs = session && session.time.created > 0 ? Date.now() - session.time.created : undefined
+
+    // Context usage: last request's tokens (input + output + reasoning + cache
+    // read/write, the figure opencode's sidebar uses) over the model's context
+    // window. Omitted when the provider gives no window size.
+    let ctxPct: number | undefined
+    if (last) {
+      const info = last
+      const used =
+        info.tokens.input +
+        info.tokens.output +
+        (info.tokens.reasoning ?? 0) +
+        (info.tokens.cache?.read ?? 0) +
+        (info.tokens.cache?.write ?? 0)
+      const model = api.state.provider.find((p) => p.id === info.providerID)?.models[info.modelID]
+      const limit = model?.limit.context
+      if (used > 0 && limit) ctxPct = Math.round((used / limit) * 100)
+    }
+
     const seg: Record<string, string> = {
       tps: s && s.tps > 0 ? `⚡ ${s.tps.toFixed(1)} tok/s` : "",
       decode:
@@ -244,7 +256,9 @@ const tui: TuiPlugin = async (api, options) => {
           : "",
       cost: cost > 0 ? usd(cost) : "",
       ttft: s && !s.live && s.ttft !== undefined && s.ttft >= 0 ? `ttft ${(s.ttft / 1000).toFixed(2)}s` : "",
-      dur: turnMs !== undefined ? fmtDur(turnMs) : "",
+      dur: turnMs !== undefined ? `⏱ ${fmtDur(turnMs)}` : "",
+      total: totalMs !== undefined && totalMs > 0 ? `Σ ${fmtDur(totalMs)}` : "",
+      ctx: ctxPct !== undefined ? `ctx ${ctxPct}%` : "",
       cache: cacheRate !== undefined ? `cache ${Math.round(cacheRate * 100)}%` : "",
       todo: total > 0 ? `todo ${done}/${total}` : "",
       pending: waiting > 0 ? `pending ${waiting}` : "",
